@@ -127,10 +127,19 @@ test("fork Manifest V3 scopes Native Messaging and uses its own icons",()=>{
  assert.equal(manifest.background.service_worker,"background.js");
  assert.equal(Object.hasOwn(manifest.background,"scripts"),false,
    "Chrome MV3 cannot declare the Firefox-only background.scripts field");
- assert.ok(manifest.web_accessible_resources.some(item=>
-   item.resources?.includes("content/bridge.js") &&
-   item.matches?.includes("https://music.youtube.com/*")),
-   "page bridge must be web-accessible on music.youtube.com");
+ assert.deepEqual(manifest.content_scripts.map(entry=>({
+   js:entry.js,world:entry.world
+ })),[
+   {js:["content/bridge.js"],world:"MAIN"},
+   {js:["content/content.js"],world:"ISOLATED"}
+ ]);
+ assert.equal(manifest.web_accessible_resources,undefined,
+   "bridge is injected by Chrome without exposing a chrome-extension:// resource");
+ const content=fs.readFileSync(root+"/content/content.js","utf8");
+ const background=fs.readFileSync(root+"/background.js","utf8");
+ assert.equal(content.includes('script.src = ext.runtime.getURL("content/bridge.js")'),false);
+ assert.ok(content.includes('command: "ping"'));
+ assert.ok(background.includes('files: ["content/bridge.js"], world: "MAIN"'));
  assert.equal(manifest.name,"Alfred Music Companion");
  assert.ok(manifest.permissions.includes("nativeMessaging"));
  assert.ok(manifest.host_permissions.includes("https://music.youtube.com/*"));
