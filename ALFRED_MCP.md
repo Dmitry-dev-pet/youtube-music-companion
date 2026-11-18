@@ -43,13 +43,19 @@ The first actual owner-Mac **Load unpacked** produced:
   merely by loading the extension. The private installer in PR #55
   registers this precise ID; never grant wildcard origins.
 - `Unsafe attempt to load URL chrome-extension://.../content/bridge.js`.
-  The `content/bridge.js` resource exists and is explicitly listed as
-  web-accessible for `https://music.youtube.com/*` in `manifest.json`.
-  This error was seen while the old, invalid manifest was loaded, so its
-  cause is **not yet established**. Refresh the extension **and** the
-  `music.youtube.com` tab after loading the fixed version, then check
-  for *new* errors. If it persists, inspect the loaded extension ID and
-  page-bridge injection separately; do not disable Chrome security.
+  The fork previously used upstream's `<script src="chrome-extension://...">`
+  page injection. For Chrome Manifest V3, **this fork now declares
+  `content/bridge.js` as a content script with `world: "MAIN"`** and
+  keeps `content/content.js` in `world: "ISOLATED"`. The browser injects
+  the existing Companion bridge directly rather than fetching a
+  `chrome-extension://` URL from the page. The direct bridge URL has
+  therefore been removed from `web_accessible_resources`, and the
+  background worker injects both worlds into already-open music tabs.
+  The content adapter uses an existing `ping` handshake after injection.
+  This follows Chrome's documented execution-world API; **live Mac
+  acceptance is still necessary**. MAIN-world page code remains
+  susceptible to interference from YouTube Music's own scripts.
+
 
 On the owner's Mac (using the existing paths from the pilot):
 
