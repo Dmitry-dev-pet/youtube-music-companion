@@ -1254,3 +1254,159 @@ function start() {
 
 start();
 injectBridge();
+
+
+// Alfred adapter for Companion for YouTube Music (GPL-3.0).
+// Append this file to upstream content/content.js via apply-to-fork.mjs.
+// Reuses existing: readState, isPlaying, pausePlayback, startPlayback,
+// commands, queueWithThumbs and askBridgeAsync. It is NOT a second extension.
+const ALFRED_MAX_RESULTS = 10;
+let alfredLastSearch = null;
+const alfredPlain = x => x && typeof x === "object" && !Array.isArray(x);
+const alfredShort = (x, n = 140) => String(x ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
+const alfredValidVideo = x => typeof x === "string" && /^[A-Za-z0-9_-]{11}$/.test(x);
+const alfredValidIndex = (x, max = 9) => Number.isInteger(x) && x >= 0 && x <= max;
+function alfredFail(code) { throw new Error(code); }
+
+function alfredSafeState() {
+  const s = readState();
+  return {
+    available: s.available === true,
+    title: alfredShort(s.title),
+    artist: alfredShort(s.artist),
+    playback: s.available !== true ? "unavailable" : isPlaying() ? "playing" : "paused",
+    duration_seconds: Number.isFinite(s.duration) ? Math.max(0, Math.round(s.duration)) : null,
+    position_seconds: Number.isFinite(s.position) ? Math.max(0, Math.round(s.position)) : null
+  };
+}
+async function alfredQueueRows() {
+  const queue = await queueWithThumbs();
+  if (!Array.isArray(queue)) alfredFail("QUEUE_UNAVAILABLE");
+  return queue.slice(0, 25).map((r, index) => ({
+    index,
+    title: alfredShort(r.title),
+    artist: alfredShort(r.artist),
+    selected: r.selected === true
+  }));
+}
+function alfredSearchResult(id, index) {
+  if (!alfredLastSearch || alfredLastSearch.id !== id ||
+      Date.now() - alfredLastSearch.at > 120000) alfredFail("SEARCH_EXPIRED");
+  if (!alfredValidIndex(index) || !alfredLastSearch.items[index])
+    alfredFail("INVALID_RESULT");
+  return alfredLastSearch.items[index];
+}
+async function alfredNativeDispatch(command, args = {}) {
+  if (!alfredPlain(args) || Object.keys(args).length > 5)
+    alfredFail("INVALID_ARGUMENTS");
+  switch (command) {
+    case "status": return alfredSafeState();
+    case "pause": {
+      const was = isPlaying();
+      if (was && await Promise.resolve(commands.pause()) === false) alfredFail("CONTROL_FAILED");
+      return { requested: was, ...alfredSafeState() };
+    }
+    case "resume": {
+      const was = isPlaying();
+      if (!was && await startPlayback() !== true) alfredFail("CONTROL_FAILED");
+      return { requested: !was, ...alfredSafeState() };
+    }
+    case "next":
+    case "previous":
+    case "shuffle":
+    case "repeat": {
+      const name = command === "repeat" ? "toggleRepeat" : command;
+      if (await Promise.resolve(commands[name]()) === false) alfredFail("CONTROL_UNAVAILABLE");
+      return { requested: true, verified_change: false };
+    }
+    case "seek": {
+      if (!alfredValidIndex(args.seconds, 86400)) alfredFail("INVALID_ARGUMENTS");
+      if (await Promise.resolve(commands.seek({ position: args.seconds })) === false)
+        alfredFail("CONTROL_UNAVAILABLE");
+      return { requested: true, verified_change: false };
+    }
+    case "volume": {
+      if (!alfredValidIndex(args.percent, 100)) alfredFail("INVALID_ARGUMENTS");
+      if (await Promise.resolve(commands.setVolume({ volume: args.percent })) === false)
+        alfredFail("CONTROL_UNAVAILABLE");
+      return { requested: true, verified_change: false };
+    }
+    case "queue": return { items: await alfredQueueRows() };
+    case "queue_play": {
+      if (!alfredValidIndex(args.index, 24)) alfredFail("INVALID_ARGUMENTS");
+      if (commands.playQueueItem({ index: args.index }) !== true)
+        alfredFail("QUEUE_ROW_UNAVAILABLE");
+      return { requested: true, verified_change: false };
+    }
+    case "search": {
+      if (typeof args.query !== "string" || !args.query.trim() || args.query.length > 120 ||
+          /[\u0000-\u001f\u007f]/.test(args.query)) alfredFail("INVALID_ARGUMENTS");
+      const response = await askBridgeAsync("search", { query: args.query.trim() }, 9000);
+      if (!response || !Array.isArray(response.songs)) alfredFail("SEARCH_UNAVAILABLE");
+      const items = response.songs.filter(song => alfredValidVideo(song?.videoId) &&
+        typeof song?.title === "string" && song.title.trim()).slice(0, ALFRED_MAX_RESULTS);
+      const id = crypto.randomUUID();
+      alfredLastSearch = { id, at: Date.now(), items };
+      return {
+        search_id: id,
+        results: items.map((s, index) => ({
+          index, title: alfredShort(s.title), artist: alfredShort(s.artist)
+        })),
+        untrusted_catalog_results: true
+      };
+    }
+    case "select": {
+      if (typeof args.search_id !== "string" ||
+          !["play", "next", "end"].includes(args.action))
+        alfredFail("INVALID_ARGUMENTS");
+      const song = alfredSearchResult(args.search_id, args.index);
+      let success = false;
+      if (args.action === "play") {
+        success = await commands.playVideoById({
+          videoId: song.videoId,
+          playlistId: song.playlistId ?? undefined,
+          params: song.params ?? undefined
+        });
+      } else {
+        success = await (args.action === "next"
+          ? commands.queueVideoNext({ videoId: song.videoId })
+          : commands.queueVideoLast({ videoId: song.videoId }));
+      }
+      if (success !== true) alfredFail("ACTION_FAILED");
+      // The existing Companion queue bridge confirms its own operation,
+      // but the observer still needs to verify actual Up Next ordering.
+      return {
+        requested: true,
+        action: args.action,
+        title: alfredShort(song.title),
+        verified_queue_change: false,
+        verified_playback_change: false
+      };
+    }
+    default: alfredFail("UNKNOWN_COMMAND");
+  }
+}
+
+// A fixed extension-internal channel. Untrusted pages cannot invoke
+// chrome.runtime.onMessage; only the extension background can reach it.
+ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "alfred.native.command") return false;
+  if (sender.id !== ext.runtime.id ||
+      location.origin !== "https://music.youtube.com") {
+    sendResponse({ ok: false, error: "ORIGIN_DENIED" });
+    return false;
+  }
+  Promise.resolve().then(() => alfredNativeDispatch(message.command, message.args))
+    .then(data => sendResponse({ ok: true, data }))
+    .catch(error => sendResponse({
+      ok: false,
+      error: [
+        "INVALID_ARGUMENTS", "UNKNOWN_COMMAND", "SEARCH_EXPIRED",
+        "INVALID_RESULT", "CONTROL_FAILED", "CONTROL_UNAVAILABLE",
+        "QUEUE_UNAVAILABLE", "QUEUE_ROW_UNAVAILABLE", "SEARCH_UNAVAILABLE",
+        "ACTION_FAILED"
+      ].includes(error?.message) ? error.message : "ACTION_FAILED"
+    }));
+  return true;
+});
+
