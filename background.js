@@ -404,3 +404,6 @@ ext.commands.onCommand.addListener(async (name) => {
     // Tab exists but the content script isn't ready (e.g. mid-reload); ignore.
   }
 });
+
+// Alfred-specific Native Messaging adapter (GPL-3.0 fork only).
+importScripts("alfred-native.js");
