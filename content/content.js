@@ -23,10 +23,9 @@ function injectBridge() {
 const pendingBridgeRequests = new Map();
 let bridgeRequestCounter = 0;
 
-// injectBridge() appends a <script src>, which loads ASYNCHRONOUSLY - commands
-// posted before it runs hit no listener and are lost for good (the popup then
-// shows "Couldn't load…" until something makes it ask again). Hold them until
-// the bridge announces itself, then flush in order.
+// Chrome injects the page bridge in MAIN world before this content script,
+// but a tab reloading or a delayed bridge can still miss an early command.
+// Hold requests until the page bridge announces readiness, then flush them.
 let bridgeReady = false;
 const bridgeOutbox = [];
 
