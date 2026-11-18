@@ -27,6 +27,49 @@ host and local MCP bridge are maintained privately in
 `Dmitry-dev-pet/infra-mcp-gateway`, draft PR #55 (directory `companion_mcp`).
 These components will need a separate macOS security review and test.
 
+## Chrome unpacked installation diagnostics (18 November 2026)
+
+The first actual owner-Mac **Load unpacked** produced:
+
+- `'background.scripts' requires manifest version of 2 or lower`.
+  Upstream ships a cross-browser MV3 declaration containing both Firefox
+  `background.scripts` and Chrome `background.service_worker`.
+  The **Chrome-only fork now removes `background.scripts`**, retaining
+  `background.service_worker: "background.js"`.
+- `Specified native messaging host not found`.
+  This is expected before a **separate** owner-user native host has been
+  registered. The exact unpacked extension ID observed in the owner's
+  Chrome is `bmipocaonoinmcgconkicgaakggbhhpo`. No host is installed
+  merely by loading the extension. The private installer in PR #55
+  registers this precise ID; never grant wildcard origins.
+- `Unsafe attempt to load URL chrome-extension://.../content/bridge.js`.
+  The `content/bridge.js` resource exists and is explicitly listed as
+  web-accessible for `https://music.youtube.com/*` in `manifest.json`.
+  This error was seen while the old, invalid manifest was loaded, so its
+  cause is **not yet established**. Refresh the extension **and** the
+  `music.youtube.com` tab after loading the fixed version, then check
+  for *new* errors. If it persists, inspect the loaded extension ID and
+  page-bridge injection separately; do not disable Chrome security.
+
+On the owner's Mac (using the existing paths from the pilot):
+
+```sh
+git -C "$HOME/alfred-companion-pilot/extension" pull --ff-only
+git -C "$HOME/alfred-companion-pilot/infra" pull --ff-only
+node "$HOME/alfred-companion-pilot/infra/companion_mcp/scripts/install-native-host.mjs" bmipocaonoinmcgconkicgaakggbhhpo
+```
+
+Then **Reload** the existing unpacked `Alfred Music Companion` on
+`chrome://extensions`, and refresh the existing YouTube Music tab.
+The native host is launched by Chrome, not by a separate terminal
+daemon. No new ChatGPT tunnel is created by this command.
+
+The `background.scripts` regression now has a source test.
+The native worker also consumes `chrome.runtime.lastError` on
+native-port disconnection, so DevTools shows a clear host error rather
+than an unchecked warning. Neither change alone proves the complete
+MCP connection works.
+
 ## Security constraints
 
 - Only `https://music.youtube.com/*` music tabs are targeted, with
