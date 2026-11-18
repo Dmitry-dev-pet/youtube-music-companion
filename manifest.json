@@ -19,17 +19,17 @@
   "background": {
     "service_worker": "background.js"
   },
-  "web_accessible_resources": [
+  "content_scripts": [
     {
-      "resources": [
-        "content/bridge.js"
-      ],
       "matches": [
         "https://music.youtube.com/*"
-      ]
-    }
-  ],
-  "content_scripts": [
+      ],
+      "js": [
+        "content/bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://music.youtube.com/*"
@@ -37,7 +37,8 @@
       "js": [
         "content/content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "world": "ISOLATED"
     }
   ],
   "action": {
