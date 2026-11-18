@@ -124,6 +124,13 @@ test("native worker refuses non-allowlisted inputs and restricts Chrome tab",asy
 test("fork Manifest V3 scopes Native Messaging and uses its own icons",()=>{
  const manifest=JSON.parse(fs.readFileSync(root+"/manifest.json","utf8"));
  assert.equal(manifest.manifest_version,3);
+ assert.equal(manifest.background.service_worker,"background.js");
+ assert.equal(Object.hasOwn(manifest.background,"scripts"),false,
+   "Chrome MV3 cannot declare the Firefox-only background.scripts field");
+ assert.ok(manifest.web_accessible_resources.some(item=>
+   item.resources?.includes("content/bridge.js") &&
+   item.matches?.includes("https://music.youtube.com/*")),
+   "page bridge must be web-accessible on music.youtube.com");
  assert.equal(manifest.name,"Alfred Music Companion");
  assert.ok(manifest.permissions.includes("nativeMessaging"));
  assert.ok(manifest.host_permissions.includes("https://music.youtube.com/*"));
