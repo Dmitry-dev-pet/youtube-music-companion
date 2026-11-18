@@ -350,9 +350,17 @@ async function attachToOpenTabs() {
   const tabs = await ext.tabs.query({ url: "https://music.youtube.com/*" });
   for (const tab of tabs) {
     if (tab.discarded) continue;
-    Promise.resolve(
-      ext.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/content.js"] })
-    ).catch(() => {});
+    // Existing tabs need the same pair as the manifest: page bridge in
+    // MAIN world, then popup/content adapter in ISOLATED world.
+    // A second bridge copy supersedes the old generation safely.
+    Promise.resolve().then(async () => {
+      await ext.scripting.executeScript({
+        target: { tabId: tab.id }, files: ["content/bridge.js"], world: "MAIN"
+      });
+      await ext.scripting.executeScript({
+        target: { tabId: tab.id }, files: ["content/content.js"], world: "ISOLATED"
+      });
+    }).catch(() => {});
   }
 }
 
