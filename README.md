@@ -1,3 +1,13 @@
+> **Alfred Music Companion — independent GPL-3.0 fork.** This branch adds a
+> narrowly scoped local MCP/Native Messaging adapter and different icons.
+> The underlying Companion player and its author are credited below.
+> See [Alfred integration, security and installation notes](ALFRED_MCP.md).
+> The bridge is experimental and not yet accepted on the owner's Mac.
+>
+> This README otherwise preserves upstream Companion documentation.
+>
+---
+ 
 <p align="center">
   <img src="icons/icon.svg" width="92" alt="">
 </p>
