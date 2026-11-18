@@ -14,16 +14,9 @@ let pageStatus = null;
 const signedIn = /(?:^|;\s*)(?:SAPISID|__Secure-3PAPISID)=/.test(document.cookie);
 
 function injectBridge() {
-  const script = document.createElement("script");
-  script.src = ext.runtime.getURL("content/bridge.js");
-  // A bridge from a previous content script may already be listening (an
-  // extension reload re-runs THIS script into a live page) - ask it to
-  // re-announce, otherwise nothing would ever flush the outbox.
-  script.onload = () => {
-    script.remove();
-    window.postMessage({ source: "ytmc-content", command: "ping" }, window.location.origin);
-  };
-  (document.head ?? document.documentElement).append(script);
+  // Chrome MV3 injects content/bridge.js directly in MAIN world via the
+  // manifest. No chrome-extension:// script URL is loaded by this page.
+  // The content script may run after bridge's ready event, so ping it.
   window.postMessage({ source: "ytmc-content", command: "ping" }, window.location.origin);
 }
 
