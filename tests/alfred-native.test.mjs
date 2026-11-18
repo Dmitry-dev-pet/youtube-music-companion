@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { inflateSync } from "node:zlib";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
@@ -131,4 +132,27 @@ test("fork Manifest V3 scopes Native Messaging and uses its own icons",()=>{
  }
  assert.ok(Object.values(manifest.icons).every(name=>name.startsWith("alfred-icons/")));
  assert.equal(manifest.background.service_worker,"background.js");
+});
+
+test("fork icons are actual decodable and correctly sized PNGs",()=>{
+ const signature=Buffer.from([137,80,78,71,13,10,26,10]);
+ for(const size of [16,32,48,128]){
+   const png=fs.readFileSync(root+"/alfred-icons/icon"+size+".png");
+   assert.deepEqual(png.subarray(0,8),signature);
+   assert.equal(png.readUInt32BE(16),size);
+   assert.equal(png.readUInt32BE(20),size);
+   const idats=[];
+   for(let at=8;at<png.length;){
+     const length=png.readUInt32BE(at);
+     const type=png.toString("ascii",at+4,at+8);
+     if(type==="IDAT")idats.push(png.subarray(at+8,at+8+length));
+     at+=length+12;
+     assert.ok(at<=png.length);
+   }
+   const raw=inflateSync(Buffer.concat(idats));
+   assert.equal(raw.length,size*(1+4*size));
+   for(let row=0;row<size;row++){
+     assert.equal(raw[row*(1+4*size)],0);
+   }
+ }
 });
