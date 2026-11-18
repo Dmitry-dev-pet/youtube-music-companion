@@ -101,7 +101,11 @@
         });
       });
       p.onDisconnect.addListener(() => {
+        // Chrome requires the lastError property to be consumed on failed
+        // native host startup. Without it DevTools emits "Unchecked runtime.lastError".
+        const lastError = api.runtime.lastError?.message ?? null;
         if (port === p) port = null;
+        if (lastError) console.warn("Alfred Music native host unavailable:", lastError);
       });
     } catch { port = null; }
   }
