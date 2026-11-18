@@ -1,0 +1,33 @@
+name: Alfred Music Companion bridge checks
+
+on:
+  pull_request:
+    paths:
+      - "alfred-native.js"
+      - "background.js"
+      - "content/content.js"
+      - "manifest.json"
+      - "tests/alfred-native.test.mjs"
+      - ".github/workflows/alfred-native-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check browser JavaScript syntax
+        run: |
+          node --check background.js
+          node --check content/content.js
+          node --check alfred-native.js
+          node --check tests/alfred-native.test.mjs
+      - name: Verify fixed music commands and fork permissions
+        run: node --test tests/alfred-native.test.mjs
